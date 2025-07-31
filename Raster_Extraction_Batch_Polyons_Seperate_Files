@@ -1,0 +1,61 @@
+from qgis.utils import iface
+import processing
+import os
+
+# Input data
+watershed_shapefile = # Give Shapefile Path for whic you want to extract raster
+input_raster_folder = # Give Raster path which you want to be extracted
+output_folder = # Give output Location folder where these extracted rasters will be saved. 
+
+# Field used to identify watersheds
+watershed_id_field = # give field Name of polygon of a shapefile for which you want to extract rasters   
+
+# Create output folder if it doesn't exist
+if not os.path.exists(output_folder):
+    os.makedirs(output_folder)
+
+# Load watershed shapefile
+watershed_layer = QgsVectorLayer(watershed_shapefile, "Watersheds", "ogr")
+if not watershed_layer.isValid():
+    print("Error: Could not load watershed shapefile!")
+    exit()
+
+# Loop through each NDSI raster file
+for raster_file in os.listdir(input_raster_folder):
+    if raster_file.endswith(".tif"):
+        raster_path = os.path.join(input_raster_folder, raster_file)
+        ndsi_layer = QgsRasterLayer(raster_path, "NDSI")
+        
+        if not ndsi_layer.isValid():
+            print(f"Error: Could not load raster {raster_file}")
+            continue
+        
+        print(f"Processing raster: {raster_file}")
+
+        # Loop through each watershed polygon
+        for feature in watershed_layer.getFeatures():
+            watershed_id = feature[watershed_id_field]
+
+            # Create temporary memory layer for current watershed
+            temp_layer = QgsVectorLayer("Polygon?crs=" + watershed_layer.crs().authid(), "temp", "memory")
+            temp_provider = temp_layer.dataProvider()
+            temp_provider.addFeatures([feature])
+
+            # Output file path
+            raster_name = os.path.splitext(raster_file)[0]  # Remove .tif extension
+            output_raster = os.path.join(output_folder, f"Watershed_{watershed_id}_{raster_name}.tif")
+
+            # Clip parameters
+            parameters = {
+                'INPUT': ndsi_layer.source(),
+                'MASK': temp_layer,
+                'SOURCE_CRS': ndsi_layer.crs(),
+                'TARGET_CRS': ndsi_layer.crs(),
+                'OUTPUT': output_raster
+            }
+
+            # Clip raster
+            processing.run("gdal:cliprasterbymasklayer", parameters)
+            print(f"Saved: {output_raster}")
+
+print("✅ All rasters processed and clipped.")
