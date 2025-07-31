@@ -1,0 +1,122 @@
+from qgis.core import (QgsProject, QgsRasterLayer, QgsProcessing, 
+                       QgsVectorLayer, QgsFeature, QgsVectorFileWriter, 
+                       QgsGeometry)
+from qgis.analysis import QgsNativeAlgorithms
+import processing
+import os
+
+# Initialize processing framework
+QgsApplication.processingRegistry().addProvider(QgsNativeAlgorithms())
+
+def batch_raster_to_points(input_folder, output_folder, boundary_path):
+    """
+    Processes all raster files in a folder to points, keeping all values
+    and clipping them by a boundary layer.
+    
+    Parameters:
+    - input_folder: Path to folder containing raster files
+    - output_folder: Path where output point shapefiles will be saved
+    - boundary_path: Path to the boundary shapefile for clipping points
+    """
+    
+    # Create output folder if it doesn't exist
+    os.makedirs(output_folder, exist_ok=True)
+    
+    # Load the boundary layer for clipping
+    boundary_layer = QgsVectorLayer(boundary_path, "Boundary", "ogr")
+    if not boundary_layer.isValid():
+        print(f"Invalid boundary layer: {boundary_path}")
+        return
+    
+    # Get list of raster files in input folder
+    raster_files = [f for f in os.listdir(input_folder) 
+                  if f.endswith(('.tif', '.tiff', '.img', '.asc', '.sdat'))]
+    
+    if not raster_files:
+        print(f"No raster files found in {input_folder}")
+        return
+    
+    print(f"Found {len(raster_files)} rasters to process:")
+    
+    for raster_file in raster_files:
+        # Set up paths
+        input_path = os.path.join(input_folder, raster_file)
+        base_name = os.path.splitext(raster_file)[0]
+        output_path = os.path.join(output_folder, f"{base_name}.shp")
+        
+        print(f"\nProcessing: {raster_file}...")
+        
+        # Process each raster
+        success = process_single_raster(input_path, output_path, base_name, boundary_layer)
+        
+        if success:
+            print(f"Successfully created: {output_path}")
+        else:
+            print(f"Failed to process: {raster_file}")
+
+def process_single_raster(input_path, output_path, layer_name, boundary_layer):
+    """
+    Processes a single raster file to points and clips with the provided boundary layer
+    """
+    try:
+        # Load raster layer
+        raster_layer = QgsRasterLayer(input_path, layer_name)
+        if not raster_layer.isValid():
+            print(f"Invalid raster: {input_path}")
+            return False
+        
+        # Convert to points
+        params = {
+            'INPUT_RASTER': raster_layer,
+            'RASTER_BAND': 1,
+            'FIELD_NAME': 'VALUE',
+            'OUTPUT': 'memory:'
+        }
+        result = processing.run("qgis:pixelstopoints", params)
+        
+        if not result['OUTPUT']:
+            return False
+            
+        # Clip points with the boundary layer
+        clipped_layer = clip_points_with_boundary(result['OUTPUT'], boundary_layer)
+        if not clipped_layer.isValid():
+            return False
+        
+        # Save results
+        error = QgsVectorFileWriter.writeAsVectorFormat(
+            clipped_layer,
+            output_path,
+            "UTF-8",
+            clipped_layer.crs(),
+            "ESRI Shapefile"
+        )
+        
+        return error[0] == QgsVectorFileWriter.NoError
+        
+    except Exception as e:
+        print(f"Error processing {input_path}: {str(e)}")
+        return False
+
+def clip_points_with_boundary(points_layer, boundary_layer):
+    """
+    Clips points layer using a polygon boundary layer
+    """
+    params = {
+        'INPUT': points_layer,
+        'OVERLAY': boundary_layer,
+        'OUTPUT': 'memory:'
+    }
+    result = processing.run("qgis:clip", params)
+    
+    if result['OUTPUT']:
+        return result['OUTPUT']
+    else:
+        print("Failed to clip points with boundary.")
+        return QgsVectorLayer()
+
+# Example usage:
+input_folder = # Folder Path for Raster Images 
+output_folder = # Folder Path for Points generated from Pixels and Clipped based on Studyarea.
+boundary_path =   # Provide path to the boundary shapefile
+
+batch_raster_to_points(input_folder, output_folder, boundary_path)
