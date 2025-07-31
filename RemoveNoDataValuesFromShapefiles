@@ -1,0 +1,49 @@
+import os
+from qgis.core import QgsVectorLayer
+
+
+layer = QgsVectorLayer("C:/path/to/your/shapefile.shp", "vector", "ogr")
+if layer.isValid():
+    fields = layer.fields()
+    print("Available field names:")
+    for field in fields:
+        print(field.name())
+
+
+
+
+#  Set the folder containing your shapefiles
+folder_path = # Folder Path to input Shapefiles which need to be corrected
+
+#  Set the field name to check for 0 or NoData
+field_name = "DN"  # <-- Replace with your actual field name
+
+#  Loop through all shapefiles in the folder
+for filename in os.listdir(folder_path):
+    if filename.endswith(".shp"):
+        file_path = os.path.join(folder_path, filename)
+        print(f"Processing: {filename}")
+
+        layer = QgsVectorLayer(file_path, filename, "ogr")
+
+        if not layer.isValid():
+            print(f" Invalid shapefile: {filename}")
+            continue
+
+        # Check if field exists
+        if field_name not in [f.name() for f in layer.fields()]:
+            print(f" Field '{field_name}' not found in {filename}")
+            continue
+
+        layer.startEditing()
+        ids_to_delete = [
+            feat.id()
+            for feat in layer.getFeatures()
+            if feat[field_name] == 0 or feat[field_name] is None
+        ]
+
+        for fid in ids_to_delete:
+            layer.deleteFeature(fid)
+
+        layer.commitChanges()
+        print(f" Cleaned {len(ids_to_delete)} features from {filename}")
