@@ -1,0 +1,33 @@
+from qgis.core import QgsRasterLayer, QgsProcessing
+import processing
+import os
+
+# Input and output folders
+clipped_raster_folder = 
+vector_output_folder = 
+
+# Create output folder if it doesn't exist
+if not os.path.exists(vector_output_folder):
+    os.makedirs(vector_output_folder)
+    print(f"Output folder {vector_output_folder} created.")
+
+# Loop through each raster file in the folder
+for raster_file in os.listdir(clipped_raster_folder):
+    if raster_file.endswith(".tif"):  # Process only .tif files
+        input_raster = os.path.join(clipped_raster_folder, raster_file)
+        output_vector = os.path.join(vector_output_folder, raster_file.replace(".tif", ".shp"))
+
+        # Run polygonize tool
+        parameters = {
+            'INPUT': input_raster,
+            'BAND': 1,  # Use first band
+            'FIELD': 'DN',  # Field name for pixel values
+            'EIGHT_CONNECTEDNESS': False,
+            'EXTRA': '',
+            'OUTPUT': output_vector
+        }
+
+        processing.run("gdal:polygonize", parameters)
+        print(f"Converted {raster_file} to {output_vector}")
+
+print("Raster to vector conversion complete!")
