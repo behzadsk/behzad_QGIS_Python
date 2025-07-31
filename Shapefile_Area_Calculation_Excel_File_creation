@@ -1,0 +1,87 @@
+from qgis.core import QgsVectorLayer, QgsField, QgsVectorFileWriter, QgsCoordinateReferenceSystem
+from qgis.PyQt.QtCore import QVariant
+import os
+import pandas as pd
+
+# Paths
+vector_folder = # Path of Shapefile whose area need to be calculated.
+excel_output_file = # Path for saving excel file that has area statistics.
+projected_folder =   # Folder for reprojected shapefiles
+
+# Create projected folder if it doesn't exist
+if not os.path.exists(projected_folder):
+    os.makedirs(projected_folder)
+
+# Target CRS (EPSG:32643 - UTM Zone 43N, meters)
+target_crs = QgsCoordinateReferenceSystem("EPSG:32643")
+
+# Dictionary to store area summary
+area_summary = []
+
+# Process each vector file
+for vector_file in os.listdir(vector_folder):
+    if vector_file.endswith(".shp"):  # Process only shapefiles
+        vector_path = os.path.join(vector_folder, vector_file)
+        projected_path = os.path.join(projected_folder, vector_file)  # Reprojected file path
+
+        # Load original vector layer
+        vector_layer = QgsVectorLayer(vector_path, vector_file, "ogr")
+        if not vector_layer.isValid():
+            print(f"Error: Could not load vector layer {vector_file}")
+            continue
+
+        # Check if CRS is already in meters; if not, reproject
+        if vector_layer.crs().isGeographic():  # If CRS is in degrees (e.g., EPSG:4326)
+            print(f"Reprojecting {vector_file} to EPSG:32643 (meters)...")
+            QgsVectorFileWriter.writeAsVectorFormat(
+                vector_layer, projected_path, "UTF-8", target_crs, "ESRI Shapefile"
+            )
+            vector_layer = QgsVectorLayer(projected_path, vector_file, "ogr")  # Load reprojected layer
+        else:
+            projected_path = vector_path  # No reprojection needed
+
+        # Start editing to add "Area" field
+        vector_layer.startEditing()
+        area_field = QgsField("Area", QVariant.Double)
+        vector_layer.dataProvider().addAttributes([area_field])
+        vector_layer.updateFields()
+
+        # Initialize area calculations
+        total_snow_area = 0
+        total_non_snow_area = 0
+
+        for feature in vector_layer.getFeatures():
+            geom = feature.geometry()
+
+            #  Ensure valid geometry before area calculation
+            if geom and not geom.isEmpty():
+                area = geom.area()  # Area in square meters
+                
+                feature["Area"] = area
+                vector_layer.updateFeature(feature)
+
+                # Corrected classification:
+                snow_value = feature["DN"]  # 1 = Non-Snow, 2 = Snow
+                if snow_value == 2:
+                    total_snow_area += area  # Snow area
+                elif snow_value == 1:
+                    total_non_snow_area += area  # Non-Snow area
+
+        # Save edits
+        vector_layer.commitChanges()
+        print(f"Updated {vector_file} with Area field (in m²).")
+
+        # Extract watershed ID from file name
+        watershed_id = vector_file.split("_")[1]  # Adjust if naming is different
+        area_summary.append({
+            "Watershed_ID": watershed_id,
+            "Snow_Area_m²": total_snow_area,
+            "Non_Snow_Area_m²": total_non_snow_area
+        })
+
+# Convert area summary to Excel
+df = pd.DataFrame(area_summary)
+df.to_excel(excel_output_file, index=False)
+print(f"Excel file saved: {excel_output_file}")
+
+print(" Processing complete! Areas are in square meters (m²).")
