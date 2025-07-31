@@ -1,0 +1,34 @@
+from qgis.core import QgsRasterLayer, QgsRasterCalculator, QgsRasterCalculatorEntry
+import os
+
+# Load your raster
+raster_path = # Path of Raster File
+raster_layer = QgsRasterLayer(raster_path, "raster")
+
+if not raster_layer.isValid():
+    print("Raster not valid!")
+else:
+    entries = []
+
+    # Set raster band
+    raster_entry = QgsRasterCalculatorEntry()
+    raster_entry.ref = 'raster@1'
+    raster_entry.raster = raster_layer
+    raster_entry.bandNumber = 1
+    entries.append(raster_entry)
+
+    output_path = # Path for Output file raster that is filtered
+
+    # Create calculator to mask out 0 and NoData values
+    calc = QgsRasterCalculator(
+        '(raster@1 > 0) * raster@1',
+        output_path,
+        'GTiff',
+        raster_layer.extent(),
+        raster_layer.width(),
+        raster_layer.height(),
+        entries
+    )
+
+    calc.processCalculation()
+    print(f"Filtered raster saved to: {output_path}")
