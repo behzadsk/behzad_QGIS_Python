@@ -1,0 +1,22 @@
+from qgis.core import (
+    QgsVectorLayer,
+    QgsProject
+)
+import processing
+
+# Input and output paths
+input_path = # Give Path of shapefile whose geometry need to be fixed
+output_path = # Give Path of shapefile whose geometry is fixed
+
+# Load the layer
+layer = QgsVectorLayer(input_path, "input_layer", "ogr")
+if not layer.isValid():
+    raise Exception("Layer failed to load!")
+
+# Run fix geometries
+processing.run("native:fixgeometries", {
+    'INPUT': input_path,
+    'OUTPUT': output_path
+})
+
+print("Geometry fixing completed.")
